@@ -130,3 +130,5 @@ vercel
 | Cron nÃ£o executa | Verifique se o Vercel Cron estÃ¡ configurado (Vercel Pro ou Hobby) |
 | Webhook nÃ£o funciona | Certifique-se de que a URL estÃ¡ acessÃ­vel publicamente |
 | Sem dados no KV | Verifique se o Vercel KV estÃ¡ conectado ao projeto |
+
+<!-- deployed -->
