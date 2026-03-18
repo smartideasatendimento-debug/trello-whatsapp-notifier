@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBoardMembers } from "@/lib/trello";
+import { getBoardMembers, getBoard, getBoardCards } from "@/lib/trello";
 import {
   sendNotification,
   formatNewCardMessage,
@@ -10,6 +10,11 @@ import { getConfig, NotificationTarget } from "@/lib/config";
 // HEAD - Trello verifica o webhook com um HEAD request
 export async function HEAD() {
   return new NextResponse(null, { status: 200 });
+}
+
+// Helper: aguardar X milissegundos
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Resolver targets para enviar notificacao
@@ -25,7 +30,6 @@ async function resolveTargets(
     } else if (t.type === "group") {
       resolved.push({ target: t.value, isGroup: true, label: t.label });
     } else if (t.type === "user") {
-      // Buscar config do usuario
       const userConfig = config.activeUsers[t.value];
       if (userConfig?.enabled) {
         const dest = userConfig.useGroup
@@ -55,7 +59,6 @@ async function sendToMultipleTargets(
 ) {
   const resolvedTargets = await resolveTargets(targets, config);
 
-  // Se nao ha targets novos, usar legacy
   if (resolvedTargets.length === 0 && legacyTarget) {
     resolvedTargets.push({
       target: legacyTarget,
@@ -99,7 +102,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      // Verificar se a lista esta sendo monitorada
       if (
         config.newCardNotifications.listIds.length > 0 &&
         !config.newCardNotifications.listIds.includes(list.id)
@@ -108,9 +110,23 @@ export async function POST(req: NextRequest) {
       }
 
       const boardId = process.env.TRELLO_BOARD_ID || "h4XEGbpc";
-      const members = await getBoardMembers(boardId);
+
+      // Delay de 10s para aguardar o Trello atualizar os membros do card
+      await delay(10000);
+
+      const [members, boardData, allCards] = await Promise.all([
+        getBoardMembers(boardId),
+        getBoard(boardId),
+        getBoardCards(boardId),
+      ]);
+
       const memberMap = new Map(members.map((m) => [m.id, m.fullName]));
-      const memberNames = (card.idMembers || []).map(
+
+      // Buscar card atualizado do Trello (com membros atualizados)
+      const freshCard = allCards.find((c) => c.id === card.id);
+      const cardMembers = freshCard?.idMembers || card.idMembers || [];
+
+      const memberNames = cardMembers.map(
         (id: string) => memberMap.get(id) || "Desconhecido"
       );
 
@@ -118,7 +134,8 @@ export async function POST(req: NextRequest) {
         card.name,
         list.name,
         memberNames,
-        `https://trello.com/c/${card.shortLink || card.id}`
+        `https://trello.com/c/${card.shortLink || card.id}`,
+        boardData.name
       );
 
       const results = await sendToMultipleTargets(
@@ -144,9 +161,24 @@ export async function POST(req: NextRequest) {
           config.newCardNotifications.listIds.includes(listAfter.id))
       ) {
         const boardId = process.env.TRELLO_BOARD_ID || "h4XEGbpc";
-        const members = await getBoardMembers(boardId);
+
+        // Delay de 10s para aguardar o Trello atualizar os membros do card
+        await delay(10000);
+
+        const [members, boardData, allCards] = await Promise.all([
+          getBoardMembers(boardId),
+          getBoard(boardId),
+          getBoardCards(boardId),
+        ]);
+
         const memberMap = new Map(members.map((m) => [m.id, m.fullName]));
-        const memberNames = (card.idMembers || []).map(
+
+        // Buscar card atualizado do Trello (com membros e prazo atualizados)
+        const freshCard = allCards.find((c) => c.id === card.id);
+        const cardMembers = freshCard?.idMembers || card.idMembers || [];
+        const cardDue = freshCard?.due || card.due || null;
+
+        const memberNames = cardMembers.map(
           (id: string) => memberMap.get(id) || "Desconhecido"
         );
 
@@ -155,7 +187,9 @@ export async function POST(req: NextRequest) {
           listAfter.name,
           listBefore?.name || "?",
           memberNames,
-          `https://trello.com/c/${card.shortLink || card.id}`
+          `https://trello.com/c/${card.shortLink || card.id}`,
+          boardData.name,
+          cardDue
         );
 
         const results = await sendToMultipleTargets(

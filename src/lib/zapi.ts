@@ -28,7 +28,6 @@ function getHeaders(): Record<string, string> {
   return headers;
 }
 
-// Formata numero para o padrao Z-API: 5511999999999
 function formatPhone(phone: string): string {
   let cleaned = phone.replace(/\D/g, "");
   if (!cleaned.startsWith("55")) {
@@ -37,7 +36,6 @@ function formatPhone(phone: string): string {
   return cleaned;
 }
 
-// Formata ID de grupo para Z-API
 function formatGroupId(groupId: string): string {
   if (groupId.includes("@g.us")) return groupId;
   const cleaned = groupId.replace(/\D/g, "");
@@ -50,7 +48,6 @@ export interface SendMessageResult {
   id: string;
 }
 
-// Enviar mensagem de texto para um numero
 export async function sendTextMessage(
   phone: string,
   message: string
@@ -69,7 +66,6 @@ export async function sendTextMessage(
   return res.json();
 }
 
-// Enviar mensagem para grupo
 export async function sendGroupMessage(
   groupId: string,
   message: string
@@ -88,12 +84,12 @@ export async function sendGroupMessage(
   return res.json();
 }
 
-// Listar grupos disponiveis
+// Listar grupos usando o endpoint correto /groups
 export async function listGroups(): Promise<
   { id: string; name: string; participants: number }[]
 > {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/chats`, {
+  const res = await fetch(`${baseUrl}/groups`, {
     method: "GET",
     headers: getHeaders(),
   });
@@ -101,17 +97,15 @@ export async function listGroups(): Promise<
     const text = await res.text();
     throw new Error(`Z-API erro ao listar grupos: ${text}`);
   }
-  const chats = await res.json();
-  return chats
-    .filter((chat: any) => chat.isGroup)
-    .map((chat: any) => ({
-      id: chat.phone,
-      name: chat.name || chat.phone,
-      participants: chat.participants?.length || 0,
-    }));
+  const groups = await res.json();
+  if (!Array.isArray(groups)) return [];
+  return groups.map((g: any) => ({
+    id: g.phone || g.id || "",
+    name: g.name || g.subject || g.phone || "Sem nome",
+    participants: g.participants?.length || g.size || 0,
+  }));
 }
 
-// Verificar status da conexao
 export async function checkConnectionStatus(): Promise<{
   connected: boolean;
   smartphoneConnected: boolean;
@@ -131,7 +125,6 @@ export async function checkConnectionStatus(): Promise<{
   };
 }
 
-// Enviar mensagem (detecta automaticamente se eh grupo ou numero)
 export async function sendNotification(
   target: string,
   message: string,
@@ -143,21 +136,20 @@ export async function sendNotification(
   return sendTextMessage(target, message);
 }
 
-// Formatar mensagem de notificacao de prazo
 export function formatDeadlineMessage(
   cardName: string,
   dueDate: string,
   listName: string,
   memberNames: string[],
   cardUrl: string,
-  hoursRemaining: number
+  hoursRemaining: number,
+  boardName?: string
 ): string {
   const due = new Date(dueDate);
   const formattedDate = due.toLocaleString("pt-BR", {
     timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -172,55 +164,75 @@ export function formatDeadlineMessage(
   }
 
   const members =
-    memberNames.length > 0 ? memberNames.join(", ") : "Sem responsavel";
+    memberNames.length > 0 ? memberNames.join(" e ") : "Sem responsavel";
+  const board = boardName || "Trello";
 
   return (
-    "\u26A0\uFE0F *ALERTA DE PRAZO - TRELLO*\n\n" +
-    "\uD83D\uDCCB *Card:* " + cardName + "\n" +
-    "\uD83D\uDCC2 *Lista:* " + listName + "\n" +
-    "\uD83D\uDC64 *Responsavel:* " + members + "\n" +
-    "\uD83D\uDCC5 *Vencimento:* " + formattedDate + "\n" +
-    "\u23F0 *Tempo restante:* " + timeText + "\n\n" +
-    "\uD83D\uDD17 " + cardUrl
+    `*\u{1F6A8} Prazo Proximo - ${board} \u{1F6A8}*\n\n` +
+    `\u{1F4CB}: ${cardName}\n\n` +
+    `*\u{1F4C5} Vencimento:* ${formattedDate}\n` +
+    `*\u{23F3} Tempo restante:* ${timeText}\n` +
+    `*\u{1F4C2} Lista:* ${listName}\n` +
+    `*\u{1F464} Responsavel:* ${members}\n` +
+    `\u{1F517} ${cardUrl}`
   );
 }
 
-// Formatar mensagem de novo card
 export function formatNewCardMessage(
   cardName: string,
   listName: string,
   memberNames: string[],
-  cardUrl: string
+  cardUrl: string,
+  boardName?: string
 ): string {
   const members =
-    memberNames.length > 0 ? memberNames.join(", ") : "Sem responsavel";
+    memberNames.length > 0 ? memberNames.join(" e ") : "Sem responsavel";
+  const board = boardName || "Trello";
 
   return (
-    "\uD83C\uDD95 *NOVO CARD - TRELLO*\n\n" +
-    "\uD83D\uDCCB *Card:* " + cardName + "\n" +
-    "\uD83D\uDCC2 *Lista:* " + listName + "\n" +
-    "\uD83D\uDC64 *Responsavel:* " + members + "\n\n" +
-    "\uD83D\uDD17 " + cardUrl
+    `*\u{1F195} Novo Card - ${board} \u{1F195}*\n\n` +
+    `\u{1F4CB}: ${cardName}\n\n` +
+    `*\u{1F4C2} Lista:* ${listName}\n` +
+    `*\u{1F464} Responsavel:* ${members}\n` +
+    `\u{1F517} ${cardUrl}`
   );
 }
 
-// Formatar mensagem de card movido
 export function formatCardMovedMessage(
   cardName: string,
   listAfterName: string,
   listBeforeName: string,
   memberNames: string[],
-  cardUrl: string
+  cardUrl: string,
+  boardName?: string,
+  dueDate?: string | null
 ): string {
   const members =
-    memberNames.length > 0 ? memberNames.join(", ") : "Sem responsavel";
+    memberNames.length > 0 ? memberNames.join(" e ") : "Sem responsavel";
+  const board = boardName || "Trello";
+
+  let dueLine = "";
+  if (dueDate) {
+    const due = new Date(dueDate);
+    const formattedDue = due.toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    dueLine = `*\u{23F3} Prazo:* ${formattedDue}\n`;
+  } else {
+    dueLine = `*\u{23F3} Prazo:* Sem prazo definido\n`;
+  }
 
   return (
-    "\uD83D\uDCE6 *CARD MOVIDO - TRELLO*\n\n" +
-    "\uD83D\uDCCB *Card:* " + cardName + "\n" +
-    "\uD83D\uDCC2 *Movido para:* " + listAfterName + "\n" +
-    "\uD83D\uDD04 *Veio de:* " + listBeforeName + "\n" +
-    "\uD83D\uDC64 *Responsavel:* " + members + "\n\n" +
-    "\uD83D\uDD17 " + cardUrl
+    `*\u{1F6A8} Cliente Atualizado - ${board} \u{1F6A8}*\n\n` +
+    `\u{1F4CB}: ${cardName}\n\n` +
+    `\u{2199}\u{FE0F} Saiu de: ${listBeforeName}\n` +
+    `\u{2197}\u{FE0F} Entrou em: ${listAfterName}\n\n` +
+    `*\u{1F464} Responsavel:* ${members}\n` +
+    dueLine +
+    `\u{1F517} ${cardUrl}`
   );
 }
