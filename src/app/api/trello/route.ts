@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
       default:
         return NextResponse.json(
-          { error: "AÃ§Ã£o invÃ¡lida. Use: board, lists, cards, members, webhooks, all" },
+          { error: "Ação inválida. Use: board, lists, cards, members, webhooks, all" },
           { status: 400 }
         );
     }
@@ -66,18 +66,23 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - Criar/Deletar webhooks
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, webhookId, listId, callbackUrl } = body;
+    const { action, listId, callbackUrl, webhookId } = body;
 
     switch (action) {
       case "create-webhook": {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL;
         const url = callbackUrl || `${appUrl}/api/webhook`;
         const boardId = process.env.TRELLO_BOARD_ID || "h4XEGbpc";
-        const modelId = listId || boardId;
+
+        // Resolve the full board ID (Trello webhooks require the full 24-char hex ID)
+        let modelId = listId;
+        if (!modelId) {
+          const boardData = await getBoard(boardId);
+          modelId = boardData.id;
+        }
 
         const webhook = await createWebhook(
           url,
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
       case "delete-webhook": {
         if (!webhookId) {
           return NextResponse.json(
-            { error: "webhookId Ã© obrigatÃ³rio" },
+            { error: "webhookId é obrigatório" },
             { status: 400 }
           );
         }
@@ -100,14 +105,14 @@ export async function POST(req: NextRequest) {
 
       default:
         return NextResponse.json(
-          { error: "AÃ§Ã£o invÃ¡lida" },
+          { error: "Ação inválida" },
           { status: 400 }
         );
     }
   } catch (error: any) {
     console.error("Trello webhook error:", error);
     return NextResponse.json(
-      { error: error.message || "Erro na operaÃ§Ã£o de webhook" },
+      { error: error.message || "Erro na operação de webhook" },
       { status: 500 }
     );
   }
