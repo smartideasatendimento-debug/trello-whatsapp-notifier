@@ -43,7 +43,6 @@ interface NotificationTarget {
 interface WhatsAppGroup {
   id: string;
   name: string;
-  participants: number;
 }
 
 interface NotificationConfig {
@@ -288,7 +287,7 @@ function TargetManager({
                 <option value="">Selecione um grupo...</option>
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
-                    {group.name} ({group.participants} participantes)
+                    {group.name}
                   </option>
                 ))}
               </select>
