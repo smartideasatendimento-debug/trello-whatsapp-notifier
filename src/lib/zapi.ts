@@ -72,17 +72,44 @@ export async function sendGroupMessage(
 ): Promise<SendMessageResult> {
   const baseUrl = getBaseUrl();
   const formattedGroup = formatGroupId(groupId);
-  // Z-API: para grupos, usar "chatId" em vez de "phone"
+
+  // Tentar primeiro com "phone" (formato padrao Z-API)
   const res = await fetch(`${baseUrl}/send-text`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ phone: formattedGroup, message }),
+  });
+
+  if (res.ok) {
+    return res.json();
+  }
+
+  // Se falhou com phone, tentar com chatId
+  console.log(`Z-API: phone falhou para grupo ${formattedGroup}, tentando chatId...`);
+  const res2 = await fetch(`${baseUrl}/send-text`, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({ chatId: formattedGroup, message }),
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Z-API erro ao enviar para grupo: ${text}`);
+
+  if (res2.ok) {
+    return res2.json();
   }
-  return res.json();
+
+  // Se ambos falharam, tentar sem @g.us usando phone
+  const withoutSuffix = groupId.replace("@g.us", "");
+  console.log(`Z-API: tentando phone sem @g.us: ${withoutSuffix}`);
+  const res3 = await fetch(`${baseUrl}/send-text`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ phone: withoutSuffix, message }),
+  });
+
+  if (!res3.ok) {
+    const text = await res3.text();
+    throw new Error(`Z-API erro ao enviar para grupo ${formattedGroup}: ${text}`);
+  }
+  return res3.json();
 }
 
 // Listar grupos via /chats e filtrar apenas grupos
