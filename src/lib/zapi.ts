@@ -72,10 +72,11 @@ export async function sendGroupMessage(
 ): Promise<SendMessageResult> {
   const baseUrl = getBaseUrl();
   const formattedGroup = formatGroupId(groupId);
+  // Z-API: para grupos, usar "chatId" em vez de "phone"
   const res = await fetch(`${baseUrl}/send-text`, {
     method: "POST",
     headers: getHeaders(),
-    body: JSON.stringify({ phone: formattedGroup, message }),
+    body: JSON.stringify({ chatId: formattedGroup, message }),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -84,26 +85,30 @@ export async function sendGroupMessage(
   return res.json();
 }
 
-// Listar grupos usando o endpoint correto /groups
+// Listar grupos via /chats e filtrar apenas grupos
 export async function listGroups(): Promise<
   { id: string; name: string; participants: number }[]
 > {
   const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/groups`, {
+  // Usar /chats com page/pageSize para buscar mais resultados
+  const res = await fetch(`${baseUrl}/chats?page=1&pageSize=200`, {
     method: "GET",
     headers: getHeaders(),
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Z-API erro ao listar grupos: ${text}`);
+    throw new Error(`Z-API erro ao listar chats: ${text}`);
   }
-  const groups = await res.json();
-  if (!Array.isArray(groups)) return [];
-  return groups.map((g: any) => ({
-    id: g.phone || g.id || "",
-    name: g.name || g.subject || g.phone || "Sem nome",
-    participants: g.participants?.length || g.size || 0,
-  }));
+  const chats = await res.json();
+  if (!Array.isArray(chats)) return [];
+  // Filtrar apenas grupos (isGroup ou phone contendo @g.us)
+  return chats
+    .filter((c: any) => c.isGroup || c.phone?.includes("@g.us") || c.isGroupV4)
+    .map((c: any) => ({
+      id: c.phone || c.chatId || "",
+      name: c.name || c.contact?.name || c.phone || "Sem nome",
+      participants: c.participants?.length || c.groupMetadata?.participants?.length || 0,
+    }));
 }
 
 export async function checkConnectionStatus(): Promise<{
