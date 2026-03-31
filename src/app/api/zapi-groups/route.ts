@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listGroups } from "@/lib/zapi";
+import { listGroups } from "@/lib/evolution";
 
 export async function GET() {
   try {

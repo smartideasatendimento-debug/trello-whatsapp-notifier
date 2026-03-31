@@ -4,7 +4,7 @@ import {
   sendNotification,
   formatNewCardMessage,
   formatCardMovedMessage,
-} from "@/lib/zapi";
+} from "@/lib/evolution";
 import { getConfig, NotificationTarget } from "@/lib/config";
 
 // HEAD - Trello verifica o webhook com um HEAD request

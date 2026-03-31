@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCardsWithUpcomingDue, getBoardMembers } from "@/lib/trello";
-import { sendNotification, formatDeadlineMessage } from "@/lib/zapi";
+import { sendNotification, formatDeadlineMessage } from "@/lib/evolution";
 import {
   getConfig,
   wasNotificationSent,

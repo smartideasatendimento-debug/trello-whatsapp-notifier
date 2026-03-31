@@ -25,7 +25,6 @@ interface TrelloCard {
   idMembers: string[];
   shortUrl: string;
 }
-
 interface UserConfig {
   enabled: boolean;
   whatsappPhone: string;
@@ -57,8 +56,7 @@ interface NotificationConfig {
     targets: NotificationTarget[];
   };
   deadlineTargets: NotificationTarget[];
-  trelloWebhookId: string | null;
-  sentNotifications: Record<string, number>;
+  trelloWebhookId: string | null;  sentNotifications: Record<string, number>;
 }
 
 // ============================================
@@ -85,7 +83,6 @@ function StatusBadge({ connected }: { connected: boolean | null }) {
     </span>
   );
 }
-
 function Toggle({
   enabled,
   onChange,
@@ -113,7 +110,6 @@ function Toggle({
     </label>
   );
 }
-
 function Card({
   title,
   icon,
@@ -137,7 +133,6 @@ function Card({
     </div>
   );
 }
-
 // Componente para gerenciar multiplos destinos
 function TargetManager({
   targets,
@@ -176,7 +171,6 @@ function TargetManager({
     setAddValue("");
     setAddLabel("");
   };
-
   const removeTarget = (id: string) => {
     onChange(targets.filter((t) => t.id !== id));
   };
@@ -184,13 +178,13 @@ function TargetManager({
   const getTargetIcon = (type: string) => {
     switch (type) {
       case "phone":
-        return "\uD83D\uDCF1";
+        return "📱";
       case "group":
-        return "\uD83D\uDC65";
+        return "👥";
       case "user":
-        return "\uD83D\uDC64";
+        return "👤";
       default:
-        return "\uD83D\uDCE8";
+        return "📨";
     }
   };
 
@@ -217,8 +211,7 @@ function TargetManager({
               key={target.id}
               className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-700"
             >
-              <div className="flex items-center gap-2">
-                <span>{getTargetIcon(target.type)}</span>
+              <div className="flex items-center gap-2">                <span>{getTargetIcon(target.type)}</span>
                 <div>
                   <div className="text-sm text-white">{target.label}</div>
                   <div className="text-xs text-slate-500">
@@ -265,7 +258,6 @@ function TargetManager({
             <option value="user">Usuario cadastrado</option>
           </select>
         </div>
-
         {addType === "group" && (
           <div className="flex items-center gap-3">
             <label className="text-sm text-slate-400 w-20">Grupo:</label>
@@ -297,8 +289,7 @@ function TargetManager({
                   type="text"
                   placeholder="ID do grupo (ex: 120363...@g.us)"
                   value={addValue}
-                  onChange={(e) => setAddValue(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                  onChange={(e) => setAddValue(e.target.value)}                  className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
                 />
                 <p className="text-xs text-amber-400">
                   Nao foi possivel carregar os grupos. Digite o ID manualmente.
@@ -377,8 +368,7 @@ function TargetManager({
         <button
           onClick={addTarget}
           disabled={!addValue}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium transition-colors"
-        >
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg text-sm font-medium transition-colors"        >
           + Adicionar destino
         </button>
       </div>
@@ -423,8 +413,12 @@ export default function Dashboard() {
     sentNotifications: {},
   });
 
-  // Z-API status
-  const [zapiConnected, setZapiConnected] = useState<boolean | null>(null);
+  // WhatsApp Evolution API status
+  const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(null);
+  const [whatsappState, setWhatsappState] = useState<string>("unknown");
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [connectingWa, setConnectingWa] = useState(false);
 
   // Test notification
   const [testPhone, setTestPhone] = useState("");
@@ -433,7 +427,7 @@ export default function Dashboard() {
 
   // Active tab
   const [activeTab, setActiveTab] = useState<
-    "lists" | "users" | "deadlines" | "newcard" | "test"
+    "lists" | "users" | "deadlines" | "newcard" | "whatsapp" | "test"
   >("lists");
 
   // ---- Data Loading ----
@@ -441,10 +435,10 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [trelloRes, configRes, zapiRes] = await Promise.all([
+      const [trelloRes, configRes, evolutionRes] = await Promise.all([
         fetch("/api/trello?action=all"),
         fetch("/api/config"),
-        fetch("/api/test-notification"),
+        fetch("/api/evolution"),
       ]);
 
       if (trelloRes.ok) {
@@ -453,8 +447,7 @@ export default function Dashboard() {
         setMembers(data.members || []);
         setCards(data.cards || []);
         setBoardName(data.board?.name || "");
-      } else {
-        const err = await trelloRes.json();
+      } else {        const err = await trelloRes.json();
         setError(
           `Erro ao carregar Trello: ${err.error}. Verifique suas credenciais.`
         );
@@ -474,9 +467,10 @@ export default function Dashboard() {
         }));
       }
 
-      if (zapiRes.ok) {
-        const status = await zapiRes.json();
-        setZapiConnected(status.connected);
+      if (evolutionRes.ok) {
+        const status = await evolutionRes.json();
+        setWhatsappConnected(status.connected);
+        setWhatsappState(status.state || "unknown");
       }
     } catch (e: any) {
       setError(`Erro de conexao: ${e.message}`);
@@ -489,7 +483,11 @@ export default function Dashboard() {
   const loadGroups = useCallback(async () => {
     setLoadingGroups(true);
     try {
-      const res = await fetch("/api/zapi-groups");
+      const res = await fetch("/api/evolution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "groups" }),
+      });
       if (res.ok) {
         const data = await res.json();
         setWhatsappGroups(data.groups || []);
@@ -501,15 +499,116 @@ export default function Dashboard() {
     }
   }, []);
 
+  // WhatsApp QR Code / Connection
+  const fetchQrCode = useCallback(async () => {
+    setLoadingQr(true);
+    try {
+      const res = await fetch("/api/evolution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "connect" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.qrcode) {
+          setQrCode(data.qrcode);
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao obter QR code:", e);
+    } finally {
+      setLoadingQr(false);
+    }
+  }, []);
+
+  const createAndConnect = useCallback(async () => {
+    setConnectingWa(true);
+    setError(null);
+    try {
+      // Primeiro tenta criar a instancia (retorna QR code se nova)
+      const createRes = await fetch("/api/evolution", {        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create" }),
+      });
+      if (createRes.ok) {
+        const data = await createRes.json();
+        if (data.qrcode) {
+          setQrCode(data.qrcode);
+          setConnectingWa(false);
+          return;
+        }
+      }
+      // Se ja existe, busca QR code
+      await fetchQrCode();
+    } catch (e: any) {
+      // Se deu erro na criacao (instancia ja existe), tenta conectar
+      try {
+        await fetchQrCode();
+      } catch (e2: any) {
+        setError(`Erro ao conectar WhatsApp: ${e2.message}`);
+      }
+    } finally {
+      setConnectingWa(false);
+    }
+  }, [fetchQrCode]);
+
+  const disconnectWhatsApp = useCallback(async () => {
+    setConnectingWa(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/evolution", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+      if (res.ok) {
+        setWhatsappConnected(false);
+        setWhatsappState("close");
+        setQrCode(null);
+        setWhatsappGroups([]);
+        setSuccess("WhatsApp desconectado com sucesso!");
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        const err = await res.json();
+        setError(`Erro ao desconectar: ${err.error}`);
+      }
+    } catch (e: any) {
+      setError(`Erro ao desconectar: ${e.message}`);
+    } finally {
+      setConnectingWa(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   useEffect(() => {
-    if (zapiConnected) {
+    if (whatsappConnected) {
       loadGroups();
     }
-  }, [zapiConnected, loadGroups]);
+  }, [whatsappConnected, loadGroups]);
+
+  // Auto-refresh connection status while waiting for QR scan
+  useEffect(() => {
+    if (!qrCode || whatsappConnected) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/evolution");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setWhatsappConnected(true);
+            setWhatsappState("open");
+            setQrCode(null);
+            setSuccess("WhatsApp conectado com sucesso!");
+            setTimeout(() => setSuccess(null), 3000);
+            loadGroups();
+          }
+        }      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [qrCode, whatsappConnected, loadGroups]);
 
   // ---- Save Config ----
   const saveConfigToServer = async () => {
@@ -585,7 +684,6 @@ export default function Dashboard() {
       },
     }));
   };
-
   const toggleNewCardList = (listId: string) => {
     setConfig((prev) => {
       const current = prev.newCardNotifications.listIds;
@@ -665,8 +763,7 @@ export default function Dashboard() {
       return hoursLeft > 0 && hoursLeft <= config.hoursBeforeDue;
     })
     .sort(
-      (a, b) => new Date(a.due!).getTime() - new Date(b.due!).getTime()
-    );
+      (a, b) => new Date(a.due!).getTime() - new Date(b.due!).getTime()    );
 
   const overdueCards = cards.filter((c) => {
     if (!c.due || c.dueComplete) return false;
@@ -692,7 +789,7 @@ export default function Dashboard() {
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              {"\uD83D\uDCCB"} Trello WhatsApp Notifier
+              📋 Trello WhatsApp Notifier
             </h1>
             <p className="text-sm text-slate-400 mt-1">
               Quadro:{" "}
@@ -701,8 +798,8 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right text-sm">
-              <div className="text-slate-400">Z-API WhatsApp</div>
-              <StatusBadge connected={zapiConnected} />
+              <div className="text-slate-400">WhatsApp</div>
+              <StatusBadge connected={whatsappConnected} />
             </div>
             <button
               onClick={saveConfigToServer}
@@ -715,7 +812,7 @@ export default function Dashboard() {
                   Salvando...
                 </>
               ) : (
-                "\uD83D\uDCBE Salvar Configuracoes"
+                "💾 Salvar Configuracoes"
               )}
             </button>
           </div>
@@ -731,7 +828,7 @@ export default function Dashboard() {
               onClick={() => setError(null)}
               className="text-red-400 hover:text-red-200"
             >
-              {"\u2715"}
+              ✕
             </button>
           </div>
         )}
@@ -745,8 +842,7 @@ export default function Dashboard() {
       {/* Stats */}
       <div className="max-w-6xl mx-auto px-6 py-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">
-            <div className="text-3xl font-bold text-white">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-4 text-center">            <div className="text-3xl font-bold text-white">
               {cards.length}
             </div>
             <div className="text-sm text-slate-400">Total de Cards</div>
@@ -776,11 +872,12 @@ export default function Dashboard() {
       <div className="max-w-6xl mx-auto px-6">
         <div className="flex gap-1 bg-slate-800 rounded-xl p-1 mb-6 border border-slate-700 overflow-x-auto">
           {[
-            { id: "lists" as const, label: "\uD83D\uDCC1 Listas" },
-            { id: "users" as const, label: "\uD83D\uDC64 Usuarios" },
-            { id: "deadlines" as const, label: "\u23F0 Prazos" },
-            { id: "newcard" as const, label: "\uD83C\uDD95 Novo Card" },
-            { id: "test" as const, label: "\uD83E\uDDEA Teste" },
+            { id: "whatsapp" as const, label: "📱 WhatsApp" },
+            { id: "lists" as const, label: "📁 Listas" },
+            { id: "users" as const, label: "👤 Usuarios" },
+            { id: "deadlines" as const, label: "⏰ Prazos" },
+            { id: "newcard" as const, label: "🆕 Novo Card" },
+            { id: "test" as const, label: "🧪 Teste" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -796,9 +893,118 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* Tab: WhatsApp */}
+        {activeTab === "whatsapp" && (
+          <Card title="Conexao WhatsApp" icon="📱">
+            <div className="space-y-6">
+              {/* Status atual */}
+              <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                <div>
+                  <div className="text-sm font-medium text-white">Status da Conexao</div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    Estado: {whatsappState === "open" ? "Conectado" : whatsappState === "connecting" ? "Conectando..." : "Desconectado"}
+                  </div>
+                </div>
+                <StatusBadge connected={whatsappConnected} />
+              </div>
+
+              {/* Acoes */}
+              <div className="flex flex-wrap gap-3">
+                {!whatsappConnected && (
+                  <button
+                    onClick={createAndConnect}
+                    disabled={connectingWa}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    {connectingWa ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Gerando QR Code...
+                      </>
+                    ) : (                      "🔗 Conectar WhatsApp"
+                    )}
+                  </button>
+                )}
+                {whatsappConnected && (
+                  <button
+                    onClick={disconnectWhatsApp}
+                    disabled={connectingWa}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    {connectingWa ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Desconectando...
+                      </>
+                    ) : (
+                      "❌ Desconectar WhatsApp"
+                    )}
+                  </button>
+                )}
+                {!whatsappConnected && qrCode && (
+                  <button
+                    onClick={fetchQrCode}
+                    disabled={loadingQr}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {loadingQr ? "Atualizando..." : "🔄 Atualizar QR Code"}
+                  </button>
+                )}
+              </div>
+
+              {/* QR Code */}
+              {!whatsappConnected && qrCode && (
+                <div className="bg-white rounded-xl p-6 flex flex-col items-center gap-4 max-w-sm mx-auto">
+                  <p className="text-gray-800 text-sm font-medium text-center">
+                    Escaneie o QR Code com o WhatsApp
+                  </p>
+                  <img
+                    src={qrCode}
+                    alt="QR Code WhatsApp"
+                    className="w-64 h-64"
+                  />
+                  <p className="text-gray-500 text-xs text-center">
+                    Abra o WhatsApp no celular > Menu > Dispositivos conectados > Conectar dispositivo
+                  </p>
+                  <div className="flex items-center gap-2 text-blue-600 text-xs">
+                    <span className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    Aguardando leitura do QR Code...
+                  </div>
+                </div>
+              )}
+
+              {/* Conectado - info */}
+              {whatsappConnected && (
+                <div className="bg-green-900/20 border border-green-800/30 rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                    <span>✅</span>
+                    WhatsApp conectado e pronto para enviar notificacoes!
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">
+                    {whatsappGroups.length > 0
+                      ? `${whatsappGroups.length} grupos encontrados.`
+                      : "Carregando grupos..."}
+                    {" "}Para trocar de WhatsApp, desconecte e escaneie um novo QR Code.
+                  </p>
+                </div>
+              )}
+
+              {/* Instrucoes */}
+              <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                <h4 className="text-sm font-medium text-white mb-2">ℹ️ Como funciona</h4>
+                <div className="text-xs text-slate-400 space-y-2">
+                  <p>1. Clique em "Conectar WhatsApp" para gerar um QR Code.</p>
+                  <p>2. Abra o WhatsApp no celular e escaneie o QR Code.</p>
+                  <p>3. Pronto! O sistema usara esse WhatsApp para enviar alertas.</p>
+                  <p>4. Para trocar de numero, desconecte e escaneie com outro celular.</p>
+                </div>
+              </div>
+            </div>
+          </Card>        )}
+
         {/* Tab: Listas */}
         {activeTab === "lists" && (
-          <Card title="Gerenciar Listas" icon={"\uD83D\uDCC1"}>
+          <Card title="Gerenciar Listas" icon="📁">
             <p className="text-slate-400 text-sm mb-4">
               Ative as listas que devem gerar notificacoes de prazo. Apenas
               cards nas listas ativas serao monitorados.
@@ -835,7 +1041,7 @@ export default function Dashboard() {
 
         {/* Tab: Usuarios */}
         {activeTab === "users" && (
-          <Card title="Gerenciar Usuarios" icon={"\uD83D\uDC64"}>
+          <Card title="Gerenciar Usuarios" icon="👤">
             <p className="text-slate-400 text-sm mb-4">
               Ative usuarios e vincule um numero de WhatsApp ou grupo para
               cada um. Estes usuarios podem ser selecionados como destino nas
@@ -873,8 +1079,7 @@ export default function Dashboard() {
                       />
                     </div>
                     {userConf.enabled && (
-                      <div className="mt-3 pl-4 border-l-2 border-blue-600 space-y-3">
-                        <div className="flex items-center gap-3">
+                      <div className="mt-3 pl-4 border-l-2 border-blue-600 space-y-3">                        <div className="flex items-center gap-3">
                           <label className="text-sm text-slate-400 w-32">
                             Enviar para:
                           </label>
@@ -953,8 +1158,7 @@ export default function Dashboard() {
                                 onChange={(e) =>
                                   updateUserWhatsApp(
                                     member.id,
-                                    "whatsappGroup",
-                                    e.target.value
+                                    "whatsappGroup",                                    e.target.value
                                   )
                                 }
                                 className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-500"
@@ -974,7 +1178,7 @@ export default function Dashboard() {
         {/* Tab: Prazos */}
         {activeTab === "deadlines" && (
           <div className="space-y-6">
-            <Card title="Configuracao de Prazos" icon={"\u23F0"}>
+            <Card title="Configuracao de Prazos" icon="⏰">
               <div className="space-y-4">
                 <div className="flex items-center gap-4">
                   <label className="text-sm text-slate-400">
@@ -1008,12 +1212,12 @@ export default function Dashboard() {
                 >
                   {saving
                     ? "Verificando..."
-                    : "\uD83D\uDD0D Verificar Prazos Agora"}
+                    : "🔍 Verificar Prazos Agora"}
                 </button>
               </div>
             </Card>
 
-            <Card title="Destinos adicionais de prazo" icon={"\uD83D\uDCE8"}>
+            <Card title="Destinos adicionais de prazo" icon="📨">
               <p className="text-slate-400 text-sm mb-4">
                 Alem dos usuarios individuais (configurados na aba Usuarios),
                 voce pode adicionar destinos extras para receber todas as
@@ -1034,9 +1238,8 @@ export default function Dashboard() {
                 activeUsers={config.activeUsers}
               />
             </Card>
-
             {upcomingCards.length > 0 && (
-              <Card title="Cards com Prazo Proximo" icon={"\u26A0\uFE0F"}>
+              <Card title="Cards com Prazo Proximo" icon="⚠️">
                 <div className="space-y-2">
                   {upcomingCards.map((card) => {
                     const due = new Date(card.due!);
@@ -1091,7 +1294,7 @@ export default function Dashboard() {
             )}
 
             {overdueCards.length > 0 && (
-              <Card title="Cards Vencidos" icon={"\uD83D\uDD34"}>
+              <Card title="Cards Vencidos" icon="🔴">
                 <div className="space-y-2">
                   {overdueCards.map((card) => {
                     const listName =
@@ -1113,8 +1316,7 @@ export default function Dashboard() {
                           </a>
                           <div className="text-xs text-slate-400 mt-1">
                             {listName}
-                          </div>
-                        </div>
+                          </div>                        </div>
                         <div className="text-xs text-red-400">
                           Vencido em{" "}
                           {new Date(card.due!).toLocaleString("pt-BR")}
@@ -1130,7 +1332,7 @@ export default function Dashboard() {
 
         {/* Tab: Novo Card */}
         {activeTab === "newcard" && (
-          <Card title="Notificacao de Novo Card" icon={"\uD83C\uDD95"}>
+          <Card title="Notificacao de Novo Card" icon="🆕">
             <p className="text-slate-400 text-sm mb-4">
               Receba notificacoes quando um novo card for criado ou movido
               para listas especificas. Requer webhook do Trello configurado.
@@ -1193,8 +1395,7 @@ export default function Dashboard() {
                       }
                       onChange={(targets) =>
                         setConfig((prev) => ({
-                          ...prev,
-                          newCardNotifications: {
+                          ...prev,                          newCardNotifications: {
                             ...prev.newCardNotifications,
                             targets,
                           },
@@ -1210,7 +1411,7 @@ export default function Dashboard() {
                   {/* Webhook config */}
                   <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
                     <h4 className="text-sm font-medium text-white mb-2">
-                      {"\u2699\uFE0F"} Configurar Webhook do Trello
+                      ⚙️ Configurar Webhook do Trello
                     </h4>
                     <p className="text-xs text-slate-400 mb-3">
                       Para receber notificacoes em tempo real, e necessario
@@ -1250,11 +1451,11 @@ export default function Dashboard() {
                       }}
                       className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
                     >
-                      {"\uD83D\uDD17"} Criar Webhook do Trello
+                      🔗 Criar Webhook do Trello
                     </button>
                     {config.trelloWebhookId && (
                       <p className="text-xs text-green-400 mt-2">
-                        {"\u2705"} Webhook ativo:{" "}
+                        ✅ Webhook ativo:{" "}
                         {config.trelloWebhookId}
                       </p>
                     )}
@@ -1267,14 +1468,13 @@ export default function Dashboard() {
 
         {/* Tab: Teste */}
         {activeTab === "test" && (
-          <Card title="Testar Notificacao" icon={"\uD83E\uDDEA"}>
+          <Card title="Testar Notificacao" icon="🧪">
             <p className="text-slate-400 text-sm mb-4">
               Envie uma mensagem de teste para verificar se a integracao com
               o WhatsApp esta funcionando.
             </p>
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <label className="text-sm text-slate-400 w-28">
+              <div className="flex items-center gap-3">                <label className="text-sm text-slate-400 w-28">
                   Tipo:
                 </label>
                 <select
@@ -1310,7 +1510,7 @@ export default function Dashboard() {
                     type="text"
                     placeholder={
                       testIsGroup
-                        ? "ID do grupo Z-API"
+                        ? "ID do grupo (ex: 120363...@g.us)"
                         : "5511999999999"
                     }
                     value={testPhone}
@@ -1326,7 +1526,7 @@ export default function Dashboard() {
               >
                 {testSending
                   ? "Enviando..."
-                  : "\uD83D\uDCE4 Enviar Mensagem de Teste"}
+                  : "📧 Enviar Mensagem de Teste"}
               </button>
             </div>
           </Card>
@@ -1335,8 +1535,8 @@ export default function Dashboard() {
 
       {/* Footer */}
       <footer className="max-w-6xl mx-auto px-6 py-8 text-center text-xs text-slate-600">
-        Trello WhatsApp Notifier - Powered by Z-API + Trello API - Vercel
-        Cron diario as 8h UTC
+        Trello WhatsApp Notifier - Powered by Evolution API + Trello API -
+        Vercel Cron diario as 8h UTC
       </footer>
     </div>
   );
