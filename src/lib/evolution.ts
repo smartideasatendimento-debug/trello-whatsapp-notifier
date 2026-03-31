@@ -206,7 +206,7 @@ export async function sendGroupMessage(
 export async function listGroups(): Promise<{ id: string; name: string }[]> {
   const { baseUrl, instanceName } = getEvolutionConfig();
   const res = await fetch(
-    `${baseUrl}/group/fetchAllGroups/${instanceName}`,    {
+    `${baseUrl}/group/fetchAllGroups/${instanceName}?getParticipants=false`,    {
       method: "GET",
       headers: getHeaders(),
     }
