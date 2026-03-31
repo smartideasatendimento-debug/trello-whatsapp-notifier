@@ -964,7 +964,7 @@ export default function Dashboard() {
                     className="w-64 h-64"
                   />
                   <p className="text-gray-500 text-xs text-center">
-                    Abra o WhatsApp no celular > Menu > Dispositivos conectados > Conectar dispositivo
+                    Abra o WhatsApp no celular &gt; Menu &gt; Dispositivos conectados &gt; Conectar dispositivo
                   </p>
                   <div className="flex items-center gap-2 text-blue-600 text-xs">
                     <span className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
